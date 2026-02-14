@@ -5,20 +5,22 @@ export class ClipRegionManager {
   private canvas: fabric.Canvas;
   private printableArea: PrintableArea;
   private overlay: fabric.FabricObject | null = null;
-  private clipPath: fabric.FabricObject | null = null;
 
   constructor(canvas: fabric.Canvas, printableArea: PrintableArea) {
     this.canvas = canvas;
     this.printableArea = printableArea;
-    this.createClipPath();
   }
 
-  private createClipPath(): void {
+  /**
+   * Create a NEW clipPath clone for each object.
+   * Each object must have its own clipPath instance.
+   */
+  createClipPathClone(): fabric.FabricObject {
     const { shape, x, y, width, height } = this.printableArea;
 
     switch (shape.type) {
       case 'rect':
-        this.clipPath = new fabric.Rect({
+        return new fabric.Rect({
           left: x,
           top: y,
           width,
@@ -27,28 +29,32 @@ export class ClipRegionManager {
           ry: shape.borderRadius ?? 0,
           absolutePositioned: true,
         });
-        break;
       case 'ellipse':
-        this.clipPath = new fabric.Ellipse({
+        return new fabric.Ellipse({
           left: x,
           top: y,
           rx: width / 2,
           ry: height / 2,
           absolutePositioned: true,
         });
-        break;
       case 'polygon':
-        this.clipPath = new fabric.Polygon(shape.points, {
+        return new fabric.Polygon(shape.points, {
           left: x,
           top: y,
           absolutePositioned: true,
         });
-        break;
+      default:
+        return new fabric.Rect({
+          left: x,
+          top: y,
+          width,
+          height,
+          absolutePositioned: true,
+        });
     }
   }
 
   render(): void {
-    // Render the dashed outline showing printable area bounds
     const { shape, x, y, width, height } = this.printableArea;
 
     if (shape.type === 'rect') {
@@ -87,12 +93,6 @@ export class ClipRegionManager {
 
     if (this.overlay) {
       this.canvas.add(this.overlay);
-    }
-  }
-
-  applyClipToObject(obj: fabric.FabricObject): void {
-    if (this.clipPath) {
-      obj.clipPath = this.clipPath;
     }
   }
 

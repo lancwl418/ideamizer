@@ -29,7 +29,4 @@
   <!-- Back yoke seam line -->
   <path d="M 220 180 L 580 180" fill="none" stroke="#e8e8e8" stroke-width="1" stroke-dasharray="4 3"/>
 
-  <!-- Design area indicator (dashed) -->
-  <rect x="270" y="220" width="260" height="320" fill="none" stroke="#e0e0e0" stroke-width="1.5" stroke-dasharray="8 4" rx="4"/>
-  <text x="400" y="385" text-anchor="middle" fill="#d0d0d0" font-family="Arial, sans-serif" font-size="16" font-weight="500">DESIGN AREA</text>
 </svg>

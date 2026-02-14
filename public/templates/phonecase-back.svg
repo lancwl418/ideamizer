@@ -22,7 +22,4 @@
   <!-- Power button -->
   <rect x="338" y="220" width="6" height="50" fill="#e0e0e0" stroke="#cccccc" stroke-width="1" rx="3"/>
 
-  <!-- Design area indicator (dashed) -->
-  <rect x="100" y="210" width="200" height="380" fill="none" stroke="#e0e0e0" stroke-width="1.5" stroke-dasharray="8 4" rx="4"/>
-  <text x="200" y="405" text-anchor="middle" fill="#d0d0d0" font-family="Arial, sans-serif" font-size="14" font-weight="500">DESIGN AREA</text>
 </svg>

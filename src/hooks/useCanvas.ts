@@ -20,32 +20,39 @@ export function useCanvas() {
 
     const manager = new CanvasManager();
     managerRef.current = manager;
+    let disposed = false;
 
-    manager.initialize(canvasRef.current, selectedTemplate, activeViewId, {
-      onObjectModified: (layerId, transform) => {
-        updateLayer(activeViewId, layerId, { transform });
-      },
-      onSelectionChanged: (layerIds) => {
-        setSelectedLayerIds(layerIds);
-      },
-    });
+    (async () => {
+      await manager.initialize(canvasRef.current!, selectedTemplate, activeViewId, {
+        onObjectModified: (layerId, transform) => {
+          updateLayer(activeViewId, layerId, { transform });
+        },
+        onSelectionChanged: (layerIds) => {
+          setSelectedLayerIds(layerIds);
+        },
+      });
 
-    // Initialize design for this template if needed
-    const design = useDesignStore.getState().design;
-    if (design.productTemplateId !== selectedTemplate.id) {
-      useDesignStore.getState().initDesign(
-        selectedTemplate.id,
-        selectedTemplate.views.map((v) => v.id)
-      );
-    }
+      // Don't proceed if disposed during await
+      if (disposed) return;
 
-    // Load existing design view
-    const view = useDesignStore.getState().design.views[activeViewId];
-    if (view && view.layers.length > 0) {
-      manager.loadDesignView(view);
-    }
+      // Initialize design for this template if needed
+      const design = useDesignStore.getState().design;
+      if (design.productTemplateId !== selectedTemplate.id) {
+        useDesignStore.getState().initDesign(
+          selectedTemplate.id,
+          selectedTemplate.views.map((v) => v.id)
+        );
+      }
+
+      // Load existing design view
+      const view = useDesignStore.getState().design.views[activeViewId];
+      if (view && view.layers.length > 0) {
+        manager.loadDesignView(view);
+      }
+    })();
 
     return () => {
+      disposed = true;
       manager.dispose();
       managerRef.current = null;
     };

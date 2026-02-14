@@ -17,13 +17,14 @@ export class CanvasManager {
   private currentView: ProductView | null = null;
   private eventHandlers: CanvasEventHandler = {};
   private backgroundImage: fabric.FabricImage | null = null;
+  private ready = false;
 
-  initialize(
+  async initialize(
     canvasElement: HTMLCanvasElement,
     template: ProductTemplate,
     viewId: string,
     handlers: CanvasEventHandler
-  ): void {
+  ): Promise<void> {
     this.eventHandlers = handlers;
 
     this.canvas = new fabric.Canvas(canvasElement, {
@@ -32,11 +33,16 @@ export class CanvasManager {
       backgroundColor: '#f0f0f0',
     });
 
-    this.setupView(template, viewId);
+    await this.setupView(template, viewId);
     this.bindEvents();
+    this.ready = true;
   }
 
-  async setupView(template: ProductTemplate, viewId: string): Promise<void> {
+  isReady(): boolean {
+    return this.ready;
+  }
+
+  private async setupView(template: ProductTemplate, viewId: string): Promise<void> {
     const view = template.views.find((v) => v.id === viewId);
     if (!view || !this.canvas) return;
 
@@ -46,7 +52,7 @@ export class CanvasManager {
     // Load mockup background
     try {
       const img = await fabric.FabricImage.fromURL(view.mockupImageUrl);
-      if (!this.canvas) return; // canvas may have been disposed during await
+      if (!this.canvas) return;
       img.set({
         selectable: false,
         evented: false,
@@ -59,7 +65,6 @@ export class CanvasManager {
       this.backgroundImage = img;
       this.canvas.insertAt(0, img);
     } catch {
-      // Mockup image not found — use plain background
       if (!this.canvas) return;
       this.canvas.backgroundColor = '#ffffff';
     }
@@ -117,17 +122,9 @@ export class CanvasManager {
   addLayer(layer: DesignLayer): void {
     if (!this.canvas || !this.currentView) return;
 
-    const obj = ObjectFactory.create(layer);
-    if (!obj) return;
+    const clipPath = this.clipRegion?.createClipPathClone() ?? null;
 
-    // Apply printable area clipping
-    if (this.clipRegion) {
-      this.clipRegion.applyClipToObject(obj);
-    }
-
-    this.canvas.add(obj);
-    this.canvas.setActiveObject(obj);
-    this.canvas.renderAll();
+    ObjectFactory.createAndAdd(layer, this.canvas, clipPath);
   }
 
   updateLayerTransform(layerId: string, transform: Partial<DesignLayer['transform']>): void {
@@ -178,7 +175,6 @@ export class CanvasManager {
   reorderLayers(orderedIds: string[]): void {
     if (!this.canvas) return;
 
-    // Start index after background image and clip region overlay
     let startIndex = 0;
     if (this.backgroundImage) startIndex++;
     if (this.clipRegion) startIndex += this.clipRegion.getOverlayCount();
@@ -186,7 +182,6 @@ export class CanvasManager {
     for (let i = 0; i < orderedIds.length; i++) {
       const obj = this.findObjectByLayerId(orderedIds[i]);
       if (obj) {
-        // Remove and re-insert at target position
         this.canvas.remove(obj);
         this.canvas.insertAt(startIndex + i, obj);
       }
@@ -197,13 +192,11 @@ export class CanvasManager {
   loadDesignView(designView: DesignView): void {
     if (!this.canvas) return;
 
-    // Remove all existing design objects (keep background and overlays)
     const designObjects = this.canvas.getObjects().filter((o) => o.data?.layerId);
     for (const obj of designObjects) {
       this.canvas.remove(obj);
     }
 
-    // Add layers from design
     for (const layer of designView.layers) {
       this.addLayer(layer);
     }
@@ -233,7 +226,6 @@ export class CanvasManager {
 
     const { printableArea } = this.currentView;
 
-    // Export only the printable area
     return this.canvas.toDataURL({
       format,
       multiplier,
@@ -253,6 +245,7 @@ export class CanvasManager {
   }
 
   dispose(): void {
+    this.ready = false;
     if (this.canvas) {
       this.canvas.dispose();
       this.canvas = null;
