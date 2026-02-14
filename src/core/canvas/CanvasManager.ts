@@ -46,6 +46,7 @@ export class CanvasManager {
     // Load mockup background
     try {
       const img = await fabric.FabricImage.fromURL(view.mockupImageUrl);
+      if (!this.canvas) return; // canvas may have been disposed during await
       img.set({
         selectable: false,
         evented: false,
@@ -59,8 +60,11 @@ export class CanvasManager {
       this.canvas.insertAt(0, img);
     } catch {
       // Mockup image not found — use plain background
+      if (!this.canvas) return;
       this.canvas.backgroundColor = '#ffffff';
     }
+
+    if (!this.canvas) return;
 
     // Setup printable area clip region
     this.clipRegion = new ClipRegionManager(this.canvas, view.printableArea);
