@@ -1,4 +1,6 @@
-export type ProductType = 'tshirt' | 'mug' | 'phonecase';
+/** Built-in product types. External templates may use any string value. */
+export type BuiltinProductType = 'tshirt' | 'mug' | 'phonecase';
+export type ProductType = BuiltinProductType | (string & {});
 
 export interface ProductView {
   id: string;

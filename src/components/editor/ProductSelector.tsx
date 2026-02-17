@@ -2,7 +2,7 @@
 
 import { useProductStore } from '@/stores/productStore';
 import { useDesignStore } from '@/stores/designStore';
-import { Shirt, Coffee, Smartphone } from 'lucide-react';
+import { Shirt, Coffee, Smartphone, Package } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 const productIcons: Record<string, typeof Shirt> = {
@@ -11,20 +11,24 @@ const productIcons: Record<string, typeof Shirt> = {
   phonecase: Smartphone,
 };
 
+function getTemplateIcon(type: string): typeof Shirt {
+  return productIcons[type] ?? Package;
+}
+
 export default function ProductSelector() {
   const { templates, selectedTemplate, selectTemplate, activeViewId, setActiveView } =
     useProductStore();
   const design = useDesignStore((s) => s.design);
 
   return (
-    <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex flex-col">
       <div className="p-3 border-b border-gray-200">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Product</h3>
       </div>
 
       <div className="p-2 space-y-1">
         {templates.map((template) => {
-          const Icon = productIcons[template.type] ?? Shirt;
+          const Icon = getTemplateIcon(template.type);
           const isSelected = selectedTemplate?.id === template.id;
 
           return (

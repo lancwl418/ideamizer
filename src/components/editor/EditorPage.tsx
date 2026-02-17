@@ -8,21 +8,44 @@ import DesignUploader from './DesignUploader';
 import LayerPanel from './LayerPanel';
 import PropertiesPanel from './PropertiesPanel';
 import ValidationDialog from './ValidationDialog';
+import { EditorConfigContext, useEditorConfig } from './EditorConfigContext';
 import { useDesignStore } from '@/stores/designStore';
 import { useProductStore } from '@/stores/productStore';
+import { useTemplateLoader } from '@/hooks/useTemplateLoader';
 import { ExportService } from '@/core/design/ExportService';
 import { validateDesign } from '@/core/design/DesignValidator';
 import type { ValidationResult } from '@/core/design/DesignValidator';
 import type { DesignLayer } from '@/types/design';
+import type { EditorConfig } from '@/types/editor-config';
 
-export default function EditorPage() {
+interface EditorPageProps {
+  config?: EditorConfig;
+}
+
+export default function EditorPage({ config }: EditorPageProps) {
+  const resolvedConfig: EditorConfig = config ?? { mode: 'demo' };
+
+  return (
+    <EditorConfigContext.Provider value={resolvedConfig}>
+      <EditorPageInner />
+    </EditorConfigContext.Provider>
+  );
+}
+
+function EditorPageInner() {
+  const editorConfig = useEditorConfig();
+  const status = useTemplateLoader();
+
   const design = useDesignStore((s) => s.design);
   const loadDesign = useDesignStore((s) => s.loadDesign);
   const selectedTemplate = useProductStore((s) => s.selectedTemplate);
+  const error = useProductStore((s) => s.error);
   const initDesign = useDesignStore((s) => s.initDesign);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const pendingExportRef = useRef<'json' | 'png' | null>(null);
+
+  const isEmbedded = editorConfig.mode === 'embedded';
 
   // Initialize design on first render
   useEffect(() => {
@@ -45,11 +68,15 @@ export default function EditorPage() {
 
   const doExport = useCallback((format: 'json' | 'png') => {
     if (format === 'json') {
-      ExportService.downloadJSON(design);
+      if (editorConfig.onExport) {
+        editorConfig.onExport(ExportService.exportJSON(design));
+      } else {
+        ExportService.downloadJSON(design);
+      }
     } else {
       window.dispatchEvent(new CustomEvent('ideamizer:export-png'));
     }
-  }, [design]);
+  }, [design, editorConfig]);
 
   const handleExportWithValidation = useCallback((format: 'json' | 'png') => {
     if (!selectedTemplate) {
@@ -75,7 +102,10 @@ export default function EditorPage() {
 
   const handleSave = useCallback(() => {
     ExportService.saveToLocal(design);
-  }, [design]);
+    if (editorConfig.onSave) {
+      editorConfig.onSave(ExportService.exportJSON(design));
+    }
+  }, [design, editorConfig]);
 
   const handleImportJSON = useCallback(() => {
     fileInputRef.current?.click();
@@ -99,8 +129,6 @@ export default function EditorPage() {
   );
 
   const handleLayerAdded = useCallback((_layer: DesignLayer) => {
-    // Canvas will pick up the layer from the store subscription
-    // For now, we dispatch a custom event so EditorCanvas can add it
     window.dispatchEvent(
       new CustomEvent('ideamizer:layer-added', { detail: _layer })
     );
@@ -111,6 +139,27 @@ export default function EditorPage() {
       new CustomEvent('ideamizer:layers-reordered', { detail: orderedIds })
     );
   }, []);
+
+  // Loading state
+  if (status === 'loading' || status === 'idle') {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-500">Loading templates...</div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (status === 'error') {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-red-500 font-medium mb-2">Failed to load templates</div>
+          <div className="text-sm text-gray-500">{error}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col">
@@ -136,9 +185,9 @@ export default function EditorPage() {
       />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left sidebar: Product selector + Upload */}
-        <div className="flex flex-col border-r border-gray-200 bg-white">
-          <ProductSelector />
+        {/* Left sidebar */}
+        <div className="w-56 flex flex-col border-r border-gray-200 bg-white">
+          {!isEmbedded && <ProductSelector />}
           <div className="p-3 border-t border-gray-200">
             <DesignUploader onLayerAdded={handleLayerAdded} />
             <button

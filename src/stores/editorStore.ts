@@ -31,7 +31,7 @@ interface EditorStoreState {
 
 export const useEditorStore = create<EditorStoreState>((set) => ({
   activeTool: 'select',
-  zoom: 1,
+  zoom: 0.7,
   selectedLayerIds: [],
   showPrintableArea: true,
   clipboard: null,
