@@ -1,15 +1,18 @@
 'use client';
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import EditorShell from './EditorShell';
 import Toolbar from './Toolbar';
 import ProductSelector from './ProductSelector';
 import DesignUploader from './DesignUploader';
 import LayerPanel from './LayerPanel';
 import PropertiesPanel from './PropertiesPanel';
+import ValidationDialog from './ValidationDialog';
 import { useDesignStore } from '@/stores/designStore';
 import { useProductStore } from '@/stores/productStore';
 import { ExportService } from '@/core/design/ExportService';
+import { validateDesign } from '@/core/design/DesignValidator';
+import type { ValidationResult } from '@/core/design/DesignValidator';
 import type { DesignLayer } from '@/types/design';
 
 export default function EditorPage() {
@@ -18,6 +21,8 @@ export default function EditorPage() {
   const selectedTemplate = useProductStore((s) => s.selectedTemplate);
   const initDesign = useDesignStore((s) => s.initDesign);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const pendingExportRef = useRef<'json' | 'png' | null>(null);
 
   // Initialize design on first render
   useEffect(() => {
@@ -38,14 +43,35 @@ export default function EditorPage() {
     return () => clearTimeout(timer);
   }, [design]);
 
-  const handleExportJSON = useCallback(() => {
-    ExportService.downloadJSON(design);
+  const doExport = useCallback((format: 'json' | 'png') => {
+    if (format === 'json') {
+      ExportService.downloadJSON(design);
+    } else {
+      window.dispatchEvent(new CustomEvent('ideamizer:export-png'));
+    }
   }, [design]);
 
+  const handleExportWithValidation = useCallback((format: 'json' | 'png') => {
+    if (!selectedTemplate) {
+      doExport(format);
+      return;
+    }
+    const result = validateDesign(design, selectedTemplate);
+    if (result.issues.length === 0) {
+      doExport(format);
+    } else {
+      pendingExportRef.current = format;
+      setValidationResult(result);
+    }
+  }, [design, selectedTemplate, doExport]);
+
+  const handleExportJSON = useCallback(() => {
+    handleExportWithValidation('json');
+  }, [handleExportWithValidation]);
+
   const handleExportPNG = useCallback(() => {
-    // PNG export requires canvas manager — dispatched via a custom event
-    window.dispatchEvent(new CustomEvent('ideamizer:export-png'));
-  }, []);
+    handleExportWithValidation('png');
+  }, [handleExportWithValidation]);
 
   const handleSave = useCallback(() => {
     ExportService.saveToLocal(design);
@@ -88,6 +114,21 @@ export default function EditorPage() {
 
   return (
     <div className="h-screen flex flex-col">
+      {validationResult && (
+        <ValidationDialog
+          result={validationResult}
+          onExportAnyway={() => {
+            const format = pendingExportRef.current;
+            setValidationResult(null);
+            pendingExportRef.current = null;
+            if (format) doExport(format);
+          }}
+          onCancel={() => {
+            setValidationResult(null);
+            pendingExportRef.current = null;
+          }}
+        />
+      )}
       <Toolbar
         onExportJSON={handleExportJSON}
         onExportPNG={handleExportPNG}

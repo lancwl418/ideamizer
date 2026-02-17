@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import type { EditorTool } from '@/types/editor';
 import type { DesignLayer } from '@/types/design';
 
+interface ViewState {
+  zoom: number;
+}
+
 interface EditorStoreState {
   activeTool: EditorTool;
   zoom: number;
@@ -11,6 +15,7 @@ interface EditorStoreState {
   showGrid: boolean;
   gridSize: number;
   snapToGrid: boolean;
+  viewStates: Record<string, ViewState>;
   // Actions
   setActiveTool: (tool: EditorTool) => void;
   setZoom: (zoom: number) => void;
@@ -20,6 +25,8 @@ interface EditorStoreState {
   toggleGrid: () => void;
   setGridSize: (size: number) => void;
   toggleSnapToGrid: () => void;
+  saveViewState: (viewId: string) => void;
+  restoreViewState: (viewId: string) => void;
 }
 
 export const useEditorStore = create<EditorStoreState>((set) => ({
@@ -31,6 +38,7 @@ export const useEditorStore = create<EditorStoreState>((set) => ({
   showGrid: false,
   gridSize: 20,
   snapToGrid: false,
+  viewStates: {},
 
   setActiveTool: (tool) => set({ activeTool: tool }),
   setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
@@ -41,4 +49,17 @@ export const useEditorStore = create<EditorStoreState>((set) => ({
   toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
   setGridSize: (size) => set({ gridSize: size }),
   toggleSnapToGrid: () => set((state) => ({ snapToGrid: !state.snapToGrid })),
+  saveViewState: (viewId) =>
+    set((state) => ({
+      viewStates: {
+        ...state.viewStates,
+        [viewId]: { zoom: state.zoom },
+      },
+    })),
+  restoreViewState: (viewId) =>
+    set((state) => {
+      const vs = state.viewStates[viewId];
+      if (!vs) return {};
+      return { zoom: vs.zoom };
+    }),
 }));

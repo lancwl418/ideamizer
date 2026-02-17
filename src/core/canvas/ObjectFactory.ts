@@ -1,5 +1,5 @@
 import * as fabric from 'fabric';
-import type { DesignLayer } from '@/types/design';
+import type { DesignLayer, ImageLayerData } from '@/types/design';
 
 export class ObjectFactory {
   /**
@@ -36,7 +36,15 @@ export class ObjectFactory {
   ): void {
     if (layer.data.type !== 'image') return;
 
-    fabric.FabricImage.fromURL(layer.data.src).then((img) => {
+    const imageData = layer.data as ImageLayerData;
+
+    fabric.FabricImage.fromURL(imageData.src).then((img) => {
+      // Apply crop if set
+      if (imageData.cropX != null) img.cropX = imageData.cropX;
+      if (imageData.cropY != null) img.cropY = imageData.cropY;
+      if (imageData.cropWidth != null) img.width = imageData.cropWidth;
+      if (imageData.cropHeight != null) img.height = imageData.cropHeight;
+
       // Scale image to fit the specified dimensions
       const imgWidth = img.width ?? 1;
       const imgHeight = img.height ?? 1;

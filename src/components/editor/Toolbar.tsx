@@ -4,7 +4,7 @@ import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize2, Download, Save,
   Eye, EyeOff, AlignStartVertical, AlignCenterVertical, AlignEndVertical,
   AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
-  FlipHorizontal2, FlipVertical2, Grid3x3, Magnet,
+  FlipHorizontal2, FlipVertical2, Grid3x3, Magnet, Crop, Check, X,
 } from 'lucide-react';
 import { useHistory } from '@/hooks/useHistory';
 import { useEditorStore } from '@/stores/editorStore';
@@ -27,7 +27,10 @@ export default function Toolbar({ onExportJSON, onExportPNG, onSave }: ToolbarPr
   const designName = useDesignStore((s) => s.design.name);
   const setDesignName = useDesignStore((s) => s.setDesignName);
 
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const hasSelection = selectedLayerIds.length === 1;
+  const isCropping = activeTool === 'crop';
 
   const handleAlign = (action: AlignAction) => {
     if (!hasSelection) return;
@@ -170,6 +173,43 @@ export default function Toolbar({ onExportJSON, onExportPNG, onSave }: ToolbarPr
           <ToolbarButton onClick={() => handleFlip('vertical')} title="Flip Vertical">
             <FlipVertical2 className="w-4 h-4" />
           </ToolbarButton>
+
+          <div className="h-6 w-px bg-gray-200 mx-1" />
+
+          {!isCropping ? (
+            <ToolbarButton
+              onClick={() => {
+                setActiveTool('crop');
+                window.dispatchEvent(
+                  new CustomEvent('ideamizer:enter-crop', { detail: selectedLayerIds[0] })
+                );
+              }}
+              title="Crop"
+            >
+              <Crop className="w-4 h-4" />
+            </ToolbarButton>
+          ) : (
+            <>
+              <ToolbarButton
+                onClick={() => {
+                  setActiveTool('select');
+                  window.dispatchEvent(new CustomEvent('ideamizer:apply-crop'));
+                }}
+                title="Apply Crop"
+              >
+                <Check className="w-4 h-4 text-green-600" />
+              </ToolbarButton>
+              <ToolbarButton
+                onClick={() => {
+                  setActiveTool('select');
+                  window.dispatchEvent(new CustomEvent('ideamizer:cancel-crop'));
+                }}
+                title="Cancel Crop"
+              >
+                <X className="w-4 h-4 text-red-500" />
+              </ToolbarButton>
+            </>
+          )}
         </>
       )}
 

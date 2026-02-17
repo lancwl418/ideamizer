@@ -5,6 +5,14 @@ import { ObjectFactory } from './ObjectFactory';
 import { ClipRegionManager } from './ClipRegionManager';
 import { GridManager } from './GridManager';
 
+export type CropResult = {
+  layerId: string;
+  cropX: number;
+  cropY: number;
+  cropWidth: number;
+  cropHeight: number;
+};
+
 export type CanvasEventHandler = {
   onObjectModified?: (layerId: string, transform: DesignLayer['transform']) => void;
   onSelectionChanged?: (layerIds: string[]) => void;
@@ -22,6 +30,8 @@ export class CanvasManager {
   private ready = false;
   private snapEnabled = false;
   private constrainEnabled = true;
+  private cropRect: fabric.Rect | null = null;
+  private cropTargetId: string | null = null;
 
   async initialize(
     canvasElement: HTMLCanvasElement,
@@ -312,6 +322,145 @@ export class CanvasManager {
 
   setConstrainToPrintableArea(enabled: boolean): void {
     this.constrainEnabled = enabled;
+  }
+
+  enterCropMode(layerId: string): boolean {
+    if (!this.canvas) return false;
+    const obj = this.findObjectByLayerId(layerId);
+    if (!obj || !(obj instanceof fabric.FabricImage)) return false;
+
+    this.cropTargetId = layerId;
+    const left = obj.left ?? 0;
+    const top = obj.top ?? 0;
+    const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+    const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+
+    this.cropRect = new fabric.Rect({
+      left,
+      top,
+      width: w,
+      height: h,
+      originX: 'left',
+      originY: 'top',
+      fill: 'rgba(0,0,0,0.3)',
+      stroke: '#ffffff',
+      strokeWidth: 2,
+      strokeDashArray: [6, 3],
+      cornerColor: '#3b82f6',
+      cornerSize: 8,
+      transparentCorners: false,
+      lockRotation: true,
+      hasRotatingPoint: false,
+      data: { isCropRect: true },
+    });
+
+    this.canvas.add(this.cropRect);
+    this.canvas.setActiveObject(this.cropRect);
+    this.canvas.renderAll();
+    return true;
+  }
+
+  applyCrop(): CropResult | null {
+    if (!this.canvas || !this.cropRect || !this.cropTargetId) return null;
+
+    const obj = this.findObjectByLayerId(this.cropTargetId);
+    if (!obj || !(obj instanceof fabric.FabricImage)) {
+      this.cancelCrop();
+      return null;
+    }
+
+    const imgLeft = obj.left ?? 0;
+    const imgTop = obj.top ?? 0;
+    const imgScaleX = obj.scaleX ?? 1;
+    const imgScaleY = obj.scaleY ?? 1;
+
+    // Crop rect bounds in canvas coordinates
+    const cropLeft = this.cropRect.left ?? 0;
+    const cropTop = this.cropRect.top ?? 0;
+    const cropW = (this.cropRect.width ?? 0) * (this.cropRect.scaleX ?? 1);
+    const cropH = (this.cropRect.height ?? 0) * (this.cropRect.scaleY ?? 1);
+
+    // Convert to source image pixel coordinates
+    const existingCropX = obj.cropX ?? 0;
+    const existingCropY = obj.cropY ?? 0;
+    const srcCropX = existingCropX + (cropLeft - imgLeft) / imgScaleX;
+    const srcCropY = existingCropY + (cropTop - imgTop) / imgScaleY;
+    const srcCropW = cropW / imgScaleX;
+    const srcCropH = cropH / imgScaleY;
+
+    // Apply crop to the image
+    obj.cropX = Math.max(0, Math.round(srcCropX));
+    obj.cropY = Math.max(0, Math.round(srcCropY));
+    obj.width = Math.round(srcCropW);
+    obj.height = Math.round(srcCropH);
+    obj.left = cropLeft;
+    obj.top = cropTop;
+    obj.scaleX = imgScaleX;
+    obj.scaleY = imgScaleY;
+    obj.setCoords();
+
+    const result: CropResult = {
+      layerId: this.cropTargetId,
+      cropX: obj.cropX,
+      cropY: obj.cropY,
+      cropWidth: obj.width,
+      cropHeight: obj.height,
+    };
+
+    // Clean up crop rect
+    this.canvas.remove(this.cropRect);
+    this.cropRect = null;
+    this.cropTargetId = null;
+    this.canvas.setActiveObject(obj);
+    this.canvas.renderAll();
+
+    return result;
+  }
+
+  cancelCrop(): void {
+    if (!this.canvas || !this.cropRect) return;
+    this.canvas.remove(this.cropRect);
+    this.cropRect = null;
+    this.cropTargetId = null;
+    this.canvas.renderAll();
+  }
+
+  isCropping(): boolean {
+    return this.cropRect !== null;
+  }
+
+  updateImageSource(layerId: string, newSrc: string): void {
+    const obj = this.findObjectByLayerId(layerId);
+    if (!obj || !(obj instanceof fabric.FabricImage) || !this.canvas) return;
+
+    const canvas = this.canvas;
+    const prevProps = {
+      left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY,
+      angle: obj.angle, flipX: obj.flipX, flipY: obj.flipY,
+      opacity: obj.opacity, clipPath: obj.clipPath, data: obj.data,
+    };
+
+    fabric.FabricImage.fromURL(newSrc).then((newImg) => {
+      const imgW = newImg.width ?? 1;
+      const imgH = newImg.height ?? 1;
+      const targetW = (obj.width ?? 1) * (prevProps.scaleX ?? 1);
+      const targetH = (obj.height ?? 1) * (prevProps.scaleY ?? 1);
+
+      newImg.set({
+        ...prevProps,
+        originX: 'left',
+        originY: 'top',
+        scaleX: targetW / imgW,
+        scaleY: targetH / imgH,
+        selectable: true,
+        evented: true,
+      });
+
+      canvas.remove(obj);
+      canvas.add(newImg);
+      canvas.setActiveObject(newImg);
+      canvas.renderAll();
+    });
   }
 
   /**

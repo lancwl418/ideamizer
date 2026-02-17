@@ -48,6 +48,10 @@ export interface ImageLayerData {
   originalWidth: number;
   originalHeight: number;
   filters: ImageFilter[];
+  cropX?: number;
+  cropY?: number;
+  cropWidth?: number;
+  cropHeight?: number;
 }
 
 export interface TextLayerData {

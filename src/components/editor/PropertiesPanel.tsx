@@ -1,10 +1,12 @@
 'use client';
 
-import { ArrowUp, ArrowDown, ChevronsUp, ChevronsDown } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowUp, ArrowDown, ChevronsUp, ChevronsDown, Eraser, Loader2 } from 'lucide-react';
 import { useDesignStore } from '@/stores/designStore';
 import { useProductStore } from '@/stores/productStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { calculateDpi } from '@/core/canvas/DpiCalculator';
+import { BackgroundRemovalService } from '@/core/canvas/BackgroundRemovalService';
 import type { DpiStatus } from '@/core/canvas/DpiCalculator';
 
 interface PropertiesPanelProps {
@@ -19,6 +21,7 @@ const dpiStatusConfig: Record<DpiStatus, { label: string; bg: string; text: stri
 };
 
 export default function PropertiesPanel({ onUpdateTransform, onReorderLayers }: PropertiesPanelProps) {
+  const [bgRemovalProgress, setBgRemovalProgress] = useState<number | null>(null);
   const activeViewId = useProductStore((s) => s.activeViewId);
   const selectedTemplate = useProductStore((s) => s.selectedTemplate);
   const design = useDesignStore((s) => s.design);
@@ -81,6 +84,31 @@ export default function PropertiesPanel({ onUpdateTransform, onReorderLayers }: 
     }
   };
 
+  const handleRemoveBg = async () => {
+    if (selectedLayer.data.type !== 'image' || bgRemovalProgress !== null) return;
+    const src = selectedLayer.data.src;
+    setBgRemovalProgress(0);
+    try {
+      const resultDataUrl = await BackgroundRemovalService.removeBackground(src, (p) => {
+        setBgRemovalProgress(p);
+      });
+      // Update store with new src
+      updateLayer(activeViewId, selectedLayer.id, {
+        data: { ...selectedLayer.data, src: resultDataUrl },
+      });
+      // Update canvas
+      window.dispatchEvent(
+        new CustomEvent('ideamizer:update-image-src', {
+          detail: { layerId: selectedLayer.id, src: resultDataUrl },
+        })
+      );
+    } catch (err) {
+      console.error('Background removal failed:', err);
+    } finally {
+      setBgRemovalProgress(null);
+    }
+  };
+
   return (
     <div className="flex flex-col">
       <div className="p-3 border-b border-gray-200">
@@ -98,6 +126,27 @@ export default function PropertiesPanel({ onUpdateTransform, onReorderLayers }: 
 
         {/* DPI Info for image layers */}
         {dpiInfo && <DpiBadge dpiInfo={dpiInfo} />}
+
+        {/* Remove Background (image layers only) */}
+        {selectedLayer.data.type === 'image' && (
+          <button
+            onClick={handleRemoveBg}
+            disabled={bgRemovalProgress !== null}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 disabled:opacity-60 disabled:cursor-wait transition-colors"
+          >
+            {bgRemovalProgress !== null ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Removing... {Math.round(bgRemovalProgress * 100)}%
+              </>
+            ) : (
+              <>
+                <Eraser className="w-4 h-4" />
+                Remove Background
+              </>
+            )}
+          </button>
+        )}
 
         {/* Position */}
         <div className="grid grid-cols-2 gap-2">

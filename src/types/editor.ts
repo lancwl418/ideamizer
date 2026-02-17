@@ -1,4 +1,4 @@
-export type EditorTool = 'select' | 'pan' | 'text' | 'shape';
+export type EditorTool = 'select' | 'pan' | 'text' | 'shape' | 'crop';
 
 export interface EditorState {
   activeTool: EditorTool;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useProductStore } from '@/stores/productStore';
+import { useDesignStore } from '@/stores/designStore';
 import { Shirt, Coffee, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -13,6 +14,7 @@ const productIcons: Record<string, typeof Shirt> = {
 export default function ProductSelector() {
   const { templates, selectedTemplate, selectTemplate, activeViewId, setActiveView } =
     useProductStore();
+  const design = useDesignStore((s) => s.design);
 
   return (
     <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
@@ -49,20 +51,29 @@ export default function ProductSelector() {
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">View</h3>
           </div>
           <div className="p-2 space-y-1">
-            {selectedTemplate.views.map((view) => (
-              <button
-                key={view.id}
-                onClick={() => setActiveView(view.id)}
-                className={cn(
-                  'w-full px-3 py-1.5 rounded-md text-sm transition-colors text-left',
-                  activeViewId === view.id
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
-                )}
-              >
-                {view.label}
-              </button>
-            ))}
+            {selectedTemplate.views.map((view) => {
+              const viewLayers = design.views[view.id]?.layers ?? [];
+              const layerCount = viewLayers.length;
+              return (
+                <button
+                  key={view.id}
+                  onClick={() => setActiveView(view.id)}
+                  className={cn(
+                    'w-full px-3 py-1.5 rounded-md text-sm transition-colors text-left flex items-center justify-between',
+                    activeViewId === view.id
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  )}
+                >
+                  <span>{view.label}</span>
+                  {layerCount > 0 && (
+                    <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
+                      {layerCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </>
       )}

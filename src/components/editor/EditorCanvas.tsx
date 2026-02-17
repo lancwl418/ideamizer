@@ -80,6 +80,57 @@ export default function EditorCanvas() {
     return () => window.removeEventListener('ideamizer:layer-flip', handler);
   }, [getManager]);
 
+  // Listen for image source update (background removal)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { layerId, src } = (e as CustomEvent).detail;
+      getManager()?.updateImageSource(layerId, src);
+    };
+    window.addEventListener('ideamizer:update-image-src', handler);
+    return () => window.removeEventListener('ideamizer:update-image-src', handler);
+  }, [getManager]);
+
+  // Listen for crop events
+  useEffect(() => {
+    const enterHandler = (e: Event) => {
+      const layerId = (e as CustomEvent<string>).detail;
+      getManager()?.enterCropMode(layerId);
+    };
+    const applyHandler = () => {
+      const result = getManager()?.applyCrop();
+      if (result) {
+        const viewId = useProductStore.getState().activeViewId;
+        const layer = useDesignStore.getState().design.views[viewId]?.layers.find(
+          (l) => l.id === result.layerId
+        );
+        if (layer && layer.data.type === 'image') {
+          useDesignStore.getState().updateLayer(viewId, result.layerId, {
+            data: {
+              ...layer.data,
+              cropX: result.cropX,
+              cropY: result.cropY,
+              cropWidth: result.cropWidth,
+              cropHeight: result.cropHeight,
+            },
+          });
+        }
+      }
+      useEditorStore.getState().setActiveTool('select');
+    };
+    const cancelHandler = () => {
+      getManager()?.cancelCrop();
+      useEditorStore.getState().setActiveTool('select');
+    };
+    window.addEventListener('ideamizer:enter-crop', enterHandler);
+    window.addEventListener('ideamizer:apply-crop', applyHandler);
+    window.addEventListener('ideamizer:cancel-crop', cancelHandler);
+    return () => {
+      window.removeEventListener('ideamizer:enter-crop', enterHandler);
+      window.removeEventListener('ideamizer:apply-crop', applyHandler);
+      window.removeEventListener('ideamizer:cancel-crop', cancelHandler);
+    };
+  }, [getManager]);
+
   // Listen for grid toggle
   useEffect(() => {
     const handler = () => {

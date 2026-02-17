@@ -15,8 +15,16 @@ export function useCanvas() {
   const updateLayer = useDesignStore((s) => s.updateLayer);
   const setSelectedLayerIds = useEditorStore((s) => s.setSelectedLayerIds);
 
+  const prevViewIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!canvasRef.current || !selectedTemplate) return;
+
+    // Save previous view state before switching
+    if (prevViewIdRef.current && prevViewIdRef.current !== activeViewId) {
+      useEditorStore.getState().saveViewState(prevViewIdRef.current);
+    }
+    prevViewIdRef.current = activeViewId;
 
     const manager = new CanvasManager();
     managerRef.current = manager;
@@ -49,10 +57,15 @@ export function useCanvas() {
       if (view && view.layers.length > 0) {
         manager.loadDesignView(view);
       }
+
+      // Restore view state (zoom) for this view
+      useEditorStore.getState().restoreViewState(activeViewId);
     })();
 
     return () => {
       disposed = true;
+      // Save state on unmount
+      useEditorStore.getState().saveViewState(activeViewId);
       manager.dispose();
       managerRef.current = null;
     };
