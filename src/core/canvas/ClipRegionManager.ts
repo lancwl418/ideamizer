@@ -25,6 +25,8 @@ export class ClipRegionManager {
           top: y,
           width,
           height,
+          originX: 'left',
+          originY: 'top',
           rx: shape.borderRadius ?? 0,
           ry: shape.borderRadius ?? 0,
           absolutePositioned: true,
@@ -35,12 +37,16 @@ export class ClipRegionManager {
           top: y,
           rx: width / 2,
           ry: height / 2,
+          originX: 'left',
+          originY: 'top',
           absolutePositioned: true,
         });
       case 'polygon':
         return new fabric.Polygon(shape.points, {
           left: x,
           top: y,
+          originX: 'left',
+          originY: 'top',
           absolutePositioned: true,
         });
       default:
@@ -49,6 +55,8 @@ export class ClipRegionManager {
           top: y,
           width,
           height,
+          originX: 'left',
+          originY: 'top',
           absolutePositioned: true,
         });
     }
@@ -63,6 +71,8 @@ export class ClipRegionManager {
         top: y,
         width,
         height,
+        originX: 'left',
+        originY: 'top',
         rx: shape.borderRadius ?? 0,
         ry: shape.borderRadius ?? 0,
         fill: 'transparent',
@@ -80,6 +90,8 @@ export class ClipRegionManager {
         top: y,
         rx: width / 2,
         ry: height / 2,
+        originX: 'left',
+        originY: 'top',
         fill: 'transparent',
         stroke: '#3b82f6',
         strokeWidth: 1.5,

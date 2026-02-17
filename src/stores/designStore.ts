@@ -13,6 +13,11 @@ interface DesignStoreState {
   updateLayer: (viewId: string, layerId: string, changes: Partial<DesignLayer>) => void;
   reorderLayers: (viewId: string, orderedIds: string[]) => void;
   setDesignName: (name: string) => void;
+  duplicateLayer: (viewId: string, layerId: string) => DesignLayer | null;
+  moveLayerForward: (viewId: string, layerId: string) => void;
+  moveLayerBackward: (viewId: string, layerId: string) => void;
+  moveLayerToFront: (viewId: string, layerId: string) => void;
+  moveLayerToBack: (viewId: string, layerId: string) => void;
 }
 
 function createEmptyDesign(): DesignDocument {
@@ -138,6 +143,109 @@ export const useDesignStore = create<DesignStoreState>()(
             updatedAt: new Date().toISOString(),
           },
         })),
+
+      duplicateLayer: (viewId, layerId) => {
+        const state = useDesignStore.getState();
+        const view = state.design.views[viewId];
+        if (!view) return null;
+        const source = view.layers.find((l) => l.id === layerId);
+        if (!source) return null;
+
+        const newLayer: DesignLayer = {
+          ...structuredClone(source),
+          id: generateId(),
+          name: `${source.name} (copy)`,
+          transform: {
+            ...source.transform,
+            x: source.transform.x + 10,
+            y: source.transform.y + 10,
+          },
+        };
+
+        set((s) => {
+          const v = s.design.views[viewId];
+          if (!v) return s;
+          const idx = v.layers.findIndex((l) => l.id === layerId);
+          const layers = [...v.layers];
+          layers.splice(idx + 1, 0, newLayer);
+          return {
+            design: {
+              ...s.design,
+              updatedAt: new Date().toISOString(),
+              views: { ...s.design.views, [viewId]: { ...v, layers } },
+            },
+          };
+        });
+        return newLayer;
+      },
+
+      moveLayerForward: (viewId, layerId) =>
+        set((state) => {
+          const view = state.design.views[viewId];
+          if (!view) return state;
+          const layers = [...view.layers];
+          const idx = layers.findIndex((l) => l.id === layerId);
+          if (idx === -1 || idx >= layers.length - 1) return state;
+          [layers[idx], layers[idx + 1]] = [layers[idx + 1], layers[idx]];
+          return {
+            design: {
+              ...state.design,
+              updatedAt: new Date().toISOString(),
+              views: { ...state.design.views, [viewId]: { ...view, layers } },
+            },
+          };
+        }),
+
+      moveLayerBackward: (viewId, layerId) =>
+        set((state) => {
+          const view = state.design.views[viewId];
+          if (!view) return state;
+          const layers = [...view.layers];
+          const idx = layers.findIndex((l) => l.id === layerId);
+          if (idx <= 0) return state;
+          [layers[idx], layers[idx - 1]] = [layers[idx - 1], layers[idx]];
+          return {
+            design: {
+              ...state.design,
+              updatedAt: new Date().toISOString(),
+              views: { ...state.design.views, [viewId]: { ...view, layers } },
+            },
+          };
+        }),
+
+      moveLayerToFront: (viewId, layerId) =>
+        set((state) => {
+          const view = state.design.views[viewId];
+          if (!view) return state;
+          const layers = view.layers.filter((l) => l.id !== layerId);
+          const target = view.layers.find((l) => l.id === layerId);
+          if (!target) return state;
+          layers.push(target);
+          return {
+            design: {
+              ...state.design,
+              updatedAt: new Date().toISOString(),
+              views: { ...state.design.views, [viewId]: { ...view, layers } },
+            },
+          };
+        }),
+
+      moveLayerToBack: (viewId, layerId) =>
+        set((state) => {
+          const view = state.design.views[viewId];
+          if (!view) return state;
+          const layers = view.layers.filter((l) => l.id !== layerId);
+          const target = view.layers.find((l) => l.id === layerId);
+          if (!target) return state;
+          layers.unshift(target);
+          return {
+            design: {
+              ...state.design,
+              updatedAt: new Date().toISOString(),
+              views: { ...state.design.views, [viewId]: { ...view, layers } },
+            },
+          };
+        }),
     }),
     {
       limit: 50,

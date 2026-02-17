@@ -46,6 +46,8 @@ export class ObjectFactory {
       img.set({
         left: layer.transform.x,
         top: layer.transform.y,
+        originX: 'left',
+        originY: 'top',
         scaleX: targetWidth / imgWidth,
         scaleY: targetHeight / imgHeight,
         angle: layer.transform.rotation,
@@ -135,6 +137,8 @@ export class ObjectFactory {
     obj.set({
       left: layer.transform.x,
       top: layer.transform.y,
+      originX: 'left',
+      originY: 'top',
       angle: layer.transform.rotation,
       scaleX: layer.transform.scaleX,
       scaleY: layer.transform.scaleY,

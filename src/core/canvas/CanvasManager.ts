@@ -3,6 +3,7 @@ import type { ProductTemplate, ProductView } from '@/types/product';
 import type { DesignLayer, DesignView } from '@/types/design';
 import { ObjectFactory } from './ObjectFactory';
 import { ClipRegionManager } from './ClipRegionManager';
+import { GridManager } from './GridManager';
 
 export type CanvasEventHandler = {
   onObjectModified?: (layerId: string, transform: DesignLayer['transform']) => void;
@@ -14,10 +15,13 @@ export type CanvasEventHandler = {
 export class CanvasManager {
   private canvas: fabric.Canvas | null = null;
   private clipRegion: ClipRegionManager | null = null;
+  private gridManager: GridManager | null = null;
   private currentView: ProductView | null = null;
   private eventHandlers: CanvasEventHandler = {};
   private backgroundImage: fabric.FabricImage | null = null;
   private ready = false;
+  private snapEnabled = false;
+  private constrainEnabled = true;
 
   async initialize(
     canvasElement: HTMLCanvasElement,
@@ -27,10 +31,17 @@ export class CanvasManager {
   ): Promise<void> {
     this.eventHandlers = handlers;
 
+    const view = template.views.find((v) => v.id === viewId);
+    const initW = view?.mockupWidth ?? 800;
+    const initH = view?.mockupHeight ?? 1000;
+
     this.canvas = new fabric.Canvas(canvasElement, {
+      width: initW,
+      height: initH,
       selection: true,
       preserveObjectStacking: true,
       backgroundColor: '#f0f0f0',
+      enableRetinaScaling: true,
     });
 
     await this.setupView(template, viewId);
@@ -47,18 +58,28 @@ export class CanvasManager {
     if (!view || !this.canvas) return;
 
     this.currentView = view;
-    this.canvas.setDimensions({ width: view.mockupWidth, height: view.mockupHeight });
 
     // Load mockup background
     try {
-      const img = await fabric.FabricImage.fromURL(view.mockupImageUrl);
+      const img = await fabric.FabricImage.fromURL(view.mockupImageUrl, {}, { crossOrigin: 'anonymous' });
       if (!this.canvas) return;
+
+      // Compute scale from intrinsic size; fall back to 1:1 if unavailable
+      const imgW = img.width || view.mockupWidth;
+      const imgH = img.height || view.mockupHeight;
+
       img.set({
+        left: 0,
+        top: 0,
+        originX: 'left',
+        originY: 'top',
+        scaleX: view.mockupWidth / imgW,
+        scaleY: view.mockupHeight / imgH,
         selectable: false,
         evented: false,
         excludeFromExport: true,
       });
-      img.scaleToWidth(view.mockupWidth);
+
       if (this.backgroundImage) {
         this.canvas.remove(this.backgroundImage);
       }
@@ -75,11 +96,32 @@ export class CanvasManager {
     this.clipRegion = new ClipRegionManager(this.canvas, view.printableArea);
     this.clipRegion.render();
 
+    // Setup grid
+    this.gridManager = new GridManager(this.canvas, view.printableArea);
+    this.gridManager.render();
+
     this.canvas.renderAll();
   }
 
   private bindEvents(): void {
     if (!this.canvas) return;
+
+    this.canvas.on('object:moving', (e) => {
+      const obj = e.target;
+      if (!obj || !obj.data?.layerId) return;
+
+      if (this.snapEnabled && this.gridManager) {
+        const snapped = this.gridManager.snapPoint(obj.left ?? 0, obj.top ?? 0);
+        obj.left = snapped.x;
+        obj.top = snapped.y;
+      }
+
+      if (this.constrainEnabled && this.currentView) {
+        this.constrainToPrintableArea(obj);
+      }
+
+      obj.setCoords();
+    });
 
     this.canvas.on('object:modified', (e) => {
       const obj = e.target;
@@ -165,6 +207,22 @@ export class CanvasManager {
     this.canvas?.renderAll();
   }
 
+  flipLayerHorizontal(layerId: string): void {
+    const obj = this.findObjectByLayerId(layerId);
+    if (!obj) return;
+    obj.flipX = !obj.flipX;
+    obj.setCoords();
+    this.canvas?.renderAll();
+  }
+
+  flipLayerVertical(layerId: string): void {
+    const obj = this.findObjectByLayerId(layerId);
+    if (!obj) return;
+    obj.flipY = !obj.flipY;
+    obj.setCoords();
+    this.canvas?.renderAll();
+  }
+
   setLayerOpacity(layerId: string, opacity: number): void {
     const obj = this.findObjectByLayerId(layerId);
     if (!obj) return;
@@ -240,17 +298,73 @@ export class CanvasManager {
     return this.canvas?.getObjects().find((o) => o.data?.layerId === layerId);
   }
 
+  setGridVisible(visible: boolean): void {
+    this.gridManager?.setVisible(visible);
+  }
+
+  setGridSize(size: number): void {
+    this.gridManager?.setGridSize(size);
+  }
+
+  setSnapToGrid(enabled: boolean): void {
+    this.snapEnabled = enabled;
+  }
+
+  setConstrainToPrintableArea(enabled: boolean): void {
+    this.constrainEnabled = enabled;
+  }
+
+  /**
+   * Constrain object so at least 20% of its area remains inside the printable area.
+   * This prevents users from accidentally dragging objects completely off the print zone.
+   */
+  private constrainToPrintableArea(obj: fabric.FabricObject): void {
+    if (!this.currentView) return;
+    const pa = this.currentView.printableArea;
+    const objW = (obj.width ?? 0) * (obj.scaleX ?? 1);
+    const objH = (obj.height ?? 0) * (obj.scaleY ?? 1);
+
+    // Require at least 20% overlap
+    const minOverlap = 0.2;
+    const minVisibleW = objW * minOverlap;
+    const minVisibleH = objH * minOverlap;
+
+    let left = obj.left ?? 0;
+    let top = obj.top ?? 0;
+
+    // Object right edge must be at least minVisibleW inside printable area left
+    if (left + objW < pa.x + minVisibleW) {
+      left = pa.x + minVisibleW - objW;
+    }
+    // Object left edge must be at most pa.x + pa.width - minVisibleW
+    if (left > pa.x + pa.width - minVisibleW) {
+      left = pa.x + pa.width - minVisibleW;
+    }
+    // Same for vertical
+    if (top + objH < pa.y + minVisibleH) {
+      top = pa.y + minVisibleH - objH;
+    }
+    if (top > pa.y + pa.height - minVisibleH) {
+      top = pa.y + pa.height - minVisibleH;
+    }
+
+    obj.left = left;
+    obj.top = top;
+  }
+
   getCanvas(): fabric.Canvas | null {
     return this.canvas;
   }
 
   dispose(): void {
     this.ready = false;
+    this.gridManager?.dispose();
     if (this.canvas) {
       this.canvas.dispose();
       this.canvas = null;
     }
     this.clipRegion = null;
+    this.gridManager = null;
     this.currentView = null;
     this.backgroundImage = null;
   }

@@ -80,6 +80,12 @@ export default function EditorPage() {
     );
   }, []);
 
+  const handleReorderLayers = useCallback((orderedIds: string[]) => {
+    window.dispatchEvent(
+      new CustomEvent('ideamizer:layers-reordered', { detail: orderedIds })
+    );
+  }, []);
+
   return (
     <div className="h-screen flex flex-col">
       <Toolbar
@@ -115,9 +121,9 @@ export default function EditorPage() {
 
         {/* Right sidebar: Layers + Properties */}
         <div className="w-64 bg-white border-l border-gray-200 flex flex-col overflow-y-auto">
-          <LayerPanel />
+          <LayerPanel onReorderLayers={handleReorderLayers} onDuplicateLayer={handleLayerAdded} />
           <div className="border-t border-gray-200">
-            <PropertiesPanel />
+            <PropertiesPanel onReorderLayers={handleReorderLayers} />
           </div>
         </div>
       </div>

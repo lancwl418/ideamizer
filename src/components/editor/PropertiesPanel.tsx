@@ -1,21 +1,38 @@
 'use client';
 
+import { ArrowUp, ArrowDown, ChevronsUp, ChevronsDown } from 'lucide-react';
 import { useDesignStore } from '@/stores/designStore';
 import { useProductStore } from '@/stores/productStore';
 import { useEditorStore } from '@/stores/editorStore';
+import { calculateDpi } from '@/core/canvas/DpiCalculator';
+import type { DpiStatus } from '@/core/canvas/DpiCalculator';
 
 interface PropertiesPanelProps {
   onUpdateTransform?: (layerId: string, transform: Record<string, unknown>) => void;
+  onReorderLayers?: (orderedIds: string[]) => void;
 }
 
-export default function PropertiesPanel({ onUpdateTransform }: PropertiesPanelProps) {
+const dpiStatusConfig: Record<DpiStatus, { label: string; bg: string; text: string; dot: string }> = {
+  good: { label: 'Good', bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
+  warning: { label: 'OK', bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500' },
+  low: { label: 'Low', bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
+};
+
+export default function PropertiesPanel({ onUpdateTransform, onReorderLayers }: PropertiesPanelProps) {
   const activeViewId = useProductStore((s) => s.activeViewId);
+  const selectedTemplate = useProductStore((s) => s.selectedTemplate);
   const design = useDesignStore((s) => s.design);
   const updateLayer = useDesignStore((s) => s.updateLayer);
+  const moveLayerForward = useDesignStore((s) => s.moveLayerForward);
+  const moveLayerBackward = useDesignStore((s) => s.moveLayerBackward);
+  const moveLayerToFront = useDesignStore((s) => s.moveLayerToFront);
+  const moveLayerToBack = useDesignStore((s) => s.moveLayerToBack);
   const selectedLayerIds = useEditorStore((s) => s.selectedLayerIds);
 
   const currentView = design.views[activeViewId];
   const selectedLayer = currentView?.layers.find((l) => l.id === selectedLayerIds[0]);
+
+  const activeProductView = selectedTemplate?.views.find((v) => v.id === activeViewId);
 
   if (!selectedLayer) {
     return (
@@ -34,6 +51,10 @@ export default function PropertiesPanel({ onUpdateTransform }: PropertiesPanelPr
 
   const { transform } = selectedLayer;
 
+  const dpiInfo = activeProductView
+    ? calculateDpi(selectedLayer, activeProductView.printableArea)
+    : null;
+
   const handleTransformChange = (key: string, value: number) => {
     const newTransform = { ...transform, [key]: value };
     updateLayer(activeViewId, selectedLayer.id, { transform: newTransform });
@@ -42,6 +63,22 @@ export default function PropertiesPanel({ onUpdateTransform }: PropertiesPanelPr
 
   const handleOpacityChange = (opacity: number) => {
     updateLayer(activeViewId, selectedLayer.id, { opacity });
+  };
+
+  const handleZOrder = (action: 'forward' | 'backward' | 'front' | 'back') => {
+    const id = selectedLayer.id;
+    switch (action) {
+      case 'forward': moveLayerForward(activeViewId, id); break;
+      case 'backward': moveLayerBackward(activeViewId, id); break;
+      case 'front': moveLayerToFront(activeViewId, id); break;
+      case 'back': moveLayerToBack(activeViewId, id); break;
+    }
+    // Sync canvas z-order
+    const view = useDesignStore.getState().design.views[activeViewId];
+    if (view) {
+      const ids = view.layers.map((l) => l.id);
+      onReorderLayers?.(ids);
+    }
   };
 
   return (
@@ -58,6 +95,9 @@ export default function PropertiesPanel({ onUpdateTransform }: PropertiesPanelPr
           <label className="text-xs text-gray-500 block mb-1">Name</label>
           <div className="text-sm font-medium text-gray-800">{selectedLayer.name}</div>
         </div>
+
+        {/* DPI Info for image layers */}
+        {dpiInfo && <DpiBadge dpiInfo={dpiInfo} />}
 
         {/* Position */}
         <div className="grid grid-cols-2 gap-2">
@@ -110,7 +150,71 @@ export default function PropertiesPanel({ onUpdateTransform }: PropertiesPanelPr
             {Math.round(selectedLayer.opacity * 100)}%
           </div>
         </div>
+
+        {/* Z-Order */}
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Layer Order</label>
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleZOrder('front')}
+              title="Bring to Front"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100"
+            >
+              <ChevronsUp className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => handleZOrder('forward')}
+              title="Bring Forward"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100"
+            >
+              <ArrowUp className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => handleZOrder('backward')}
+              title="Send Backward"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100"
+            >
+              <ArrowDown className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => handleZOrder('back')}
+              title="Send to Back"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100"
+            >
+              <ChevronsDown className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function DpiBadge({ dpiInfo }: { dpiInfo: { effectiveDpi: number; status: DpiStatus; minDpi: number } }) {
+  const config = dpiStatusConfig[dpiInfo.status];
+
+  return (
+    <div className={`rounded-lg p-2.5 ${config.bg}`}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-gray-600">Print DPI</span>
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${config.text}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+          {config.label}
+        </span>
+      </div>
+      <div className={`text-lg font-bold ${config.text}`}>
+        {dpiInfo.effectiveDpi} DPI
+      </div>
+      {dpiInfo.status === 'low' && (
+        <p className="text-xs text-red-600 mt-1">
+          Below minimum {dpiInfo.minDpi} DPI. Image may print blurry.
+        </p>
+      )}
+      {dpiInfo.status === 'warning' && (
+        <p className="text-xs text-yellow-600 mt-1">
+          Acceptable, but 300+ DPI recommended for best quality.
+        </p>
+      )}
     </div>
   );
 }
